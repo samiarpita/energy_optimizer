@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+
+# Python virtual env & caches
+.venv
+venv
+ENV
+env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+htmlcov/
+
+# Secrets & Local Config
+.env
+.env.local
+*.pem
+*.key
+
+# Test and plan docs not needed in runtime image
+plan/
+docs/
+tests/
+.idea/
+.vscode/
