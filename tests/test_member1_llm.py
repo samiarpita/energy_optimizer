@@ -280,6 +280,36 @@ class TestMember1LLMAndGuardrails(unittest.TestCase):
             self.assertEqual(directives[0].directive_type, "solar_reduction")
             self.assertEqual(directives[0].structured_adjustment["hours"], [11, 12])
 
+    def test_in_memory_lru_cache_speed(self):
+        """Test that repeated calls are served instantaneously (<1ms) from cache."""
+        import time
+        notes = ["Do not charge the battery between 2 PM and 4 PM."]
+        # Prime the cache
+        res1 = interpret_operator_notes(notes, self.battery_capacity_200)
+        
+        t0 = time.perf_counter()
+        res2 = interpret_operator_notes(notes, self.battery_capacity_200)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+
+        self.assertEqual(res1[0].directive_type, res2[0].directive_type)
+        self.assertLess(elapsed_ms, 5.0, f"Cache took {elapsed_ms}ms, expected sub-millisecond")
+
+    def test_advanced_paraphrase_variations(self):
+        """Test subtle paraphrase variations: 'percent', 'one-fifth', 'one until three'."""
+        # Variation A: "one until three will leave roughly one-fifth"
+        notes = ["Panel washing from one until three will leave roughly one-fifth of normal solar output."]
+        dirs = interpret_operator_notes(notes, self.battery_capacity_200)
+        self.assertEqual(dirs[0].directive_type, "solar_reduction")
+        self.assertEqual(dirs[0].structured_adjustment["hours"], [13, 14])
+        self.assertAlmostEqual(dirs[0].structured_adjustment["factor"], 0.2, places=2)
+
+        # Variation B: "80 percent reduction"
+        notes_b = ["Expect an 80 percent reduction in rooftop solar during the 1-3 PM maintenance window."]
+        dirs_b = interpret_operator_notes(notes_b, self.battery_capacity_200)
+        self.assertEqual(dirs_b[0].directive_type, "solar_reduction")
+        self.assertEqual(dirs_b[0].structured_adjustment["hours"], [13, 14])
+        self.assertAlmostEqual(dirs_b[0].structured_adjustment["factor"], 0.2, places=2)
+
 
 if __name__ == "__main__":
     unittest.main()
