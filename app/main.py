@@ -145,7 +145,15 @@ def _run_optimizer(
     return hourly_plan, summary
 
 
+from fastapi.responses import JSONResponse, RedirectResponse
+
 # --- Endpoints ---
+@app.get("/", include_in_schema=False)
+async def root():
+    """Redirect root to interactive Swagger UI documentation."""
+    return RedirectResponse(url="/docs")
+
+
 @app.get(
     "/health",
     response_model=HealthResponse,
