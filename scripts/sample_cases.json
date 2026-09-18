@@ -1,0 +1,15 @@
+{
+  "_meta": {
+    "title": "GridWise — Public LLM-Assisted Sample Case Pack",
+    "event": "BUP CSE Fest 2026 · Hackathon · Online Preliminary",
+    "version": "2.0",
+    "endpoint": "POST /optimize-energy",
+    "case_count": 10,
+    "compatible_with": {
+      "problem_statement": "BUP_CSE_FEST_2026_Preliminary_Problem_Statement_GridWise_LLM",
+      "participant_guide": "BUP_CSE_FEST_2026_Participant_Guide_and_Evaluation_Rubric_GridWise_LLM"
+    },
+    "description": "Ten fully worked public examples for the LLM-assisted GridWise preliminary. Each case includes 1–3 operator notes, the expected machine-checkable directive interpretation, and one valid optimal 24-hour reference schedule. These are public examples only and are not hidden judge cases."
+  },
+  "cases": []
+}
