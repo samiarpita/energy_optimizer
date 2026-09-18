@@ -379,17 +379,28 @@ def interpret_operator_notes(
         logger.debug("Serving directive interpretations from memory cache.")
         return _INTERPRETER_CACHE[cache_key]
 
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    raw_keys = os.environ.get("GEMINI_API_KEYS", "") or os.environ.get("GEMINI_API_KEY", "")
+    api_keys = [
+        k.strip() for k in raw_keys.split(",")
+        if k.strip() and k.strip() != "your_gemini_api_key_here"
+    ]
     model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
 
-    # 2. If valid Gemini API key is configured, call Gemini Flash API
-    if api_key and api_key != "your_gemini_api_key_here":
-        logger.info("Interpreting %d notes with Google Gemini Flash (%s)", len(operator_notes), model_name)
-        gemini_result = _call_gemini_api(operator_notes, battery_capacity_kwh, api_key, model_name)
-        if gemini_result is not None:
-            _INTERPRETER_CACHE[cache_key] = gemini_result
-            return gemini_result
-        logger.info("Falling back to deterministic rule engine after Gemini failure.")
+    # 2. Iterate through available key pool with automatic fail-over on quota/rate-limits
+    if api_keys:
+        for key_idx, active_key in enumerate(api_keys, 1):
+            try:
+                masked_key = active_key[:8] + "..." + active_key[-4:] if len(active_key) > 12 else "key"
+                logger.info("Attempting Gemini API interpretation using key %d/%d (%s)", key_idx, len(api_keys), masked_key)
+                gemini_result = _call_gemini_api(operator_notes, battery_capacity_kwh, active_key, model_name)
+                if gemini_result is not None:
+                    _INTERPRETER_CACHE[cache_key] = gemini_result
+                    return gemini_result
+                logger.warning("Key %d/%d failed to produce valid result. Trying next key...", key_idx, len(api_keys))
+            except Exception as ex:
+                logger.warning("Key %d/%d error (%s). Trying next key...", key_idx, len(api_keys), ex)
+
+        logger.info("All Gemini API keys exhausted or unavailable. Falling back to deterministic rule engine.")
 
     # 3. High-precision deterministic fallback engine
     try:
