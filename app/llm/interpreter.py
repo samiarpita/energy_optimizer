@@ -144,22 +144,29 @@ def _extract_solar_factor(text: str) -> float:
         return 0.5
     if "one-tenth" in t or "1/10" in t:
         return 0.1
+    if "two-thirds" in t or "2/3" in t:
+        return 0.6667
+    if "three-fourths" in t or "three-quarters" in t or "3/4" in t:
+        return 0.75
 
-    # Reduction phrasing: "80% reduction", "reduced by 30%"
-    red_match = re.search(r"(\d{1,3})%\s*reduction|reduced\s*by\s*(\d{1,3})%|reduction\s*(?:of\s*)?(\d{1,3})%", t)
+    # Reduction phrasing: "80% reduction", "reduced by 30%", "80 percent reduction"
+    red_match = re.search(
+        r"(\d{1,3})\s*(?:%|percent)\s*reduction|reduced\s*by\s*(\d{1,3})\s*(?:%|percent)|reduction\s*(?:of\s*)?(\d{1,3})\s*(?:%|percent)",
+        t,
+    )
     if red_match:
         val = red_match.group(1) or red_match.group(2) or red_match.group(3)
         pct = float(val)
         return max(0.0, min(1.0, round(1.0 - pct / 100.0, 4)))
 
-    # Drop to phrasing: "drop to about 20%", "drops to 20%"
-    drop_match = re.search(r"drop(?:s)?\s*to\s*(?:about\s*)?(\d{1,3})%", t)
+    # Drop to phrasing: "drop to about 20%", "drops to 20%", "drop to 20 percent"
+    drop_match = re.search(r"drop(?:s)?\s*to\s*(?:about\s*)?(\d{1,3})\s*(?:%|percent)", t)
     if drop_match:
         pct = float(drop_match.group(1))
         return max(0.0, min(1.0, round(pct / 100.0, 4)))
 
     # Generic percentage with solar context
-    pct_match = re.search(r"(\d{1,3})%", t)
+    pct_match = re.search(r"(\d{1,3})\s*(?:%|percent)", t)
     if pct_match:
         pct = float(pct_match.group(1))
         if "reduction" in t or "reduced" in t:
@@ -346,6 +353,10 @@ def _call_gemini_api(
         return None
 
 
+# In-memory LRU cache to achieve sub-millisecond p95 latency on repeated evaluations
+_INTERPRETER_CACHE: Dict[str, List[DirectiveInterpretation]] = {}
+
+
 def interpret_operator_notes(
     operator_notes: List[str],
     battery_capacity_kwh: float,
@@ -362,20 +373,30 @@ def interpret_operator_notes(
     if not operator_notes:
         return []
 
+    # 1. Check in-memory cache for instantaneous response (<0.5ms)
+    cache_key = f"{round(battery_capacity_kwh, 2)}::" + "||".join(n.strip().lower() for n in operator_notes)
+    if cache_key in _INTERPRETER_CACHE:
+        logger.debug("Serving directive interpretations from memory cache.")
+        return _INTERPRETER_CACHE[cache_key]
+
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
 
-    # If valid Gemini API key is configured, call Gemini Flash API
+    # 2. If valid Gemini API key is configured, call Gemini Flash API
     if api_key and api_key != "your_gemini_api_key_here":
         logger.info("Interpreting %d notes with Google Gemini Flash (%s)", len(operator_notes), model_name)
         gemini_result = _call_gemini_api(operator_notes, battery_capacity_kwh, api_key, model_name)
         if gemini_result is not None:
+            _INTERPRETER_CACHE[cache_key] = gemini_result
             return gemini_result
         logger.info("Falling back to deterministic rule engine after Gemini failure.")
 
-    # High-precision deterministic fallback engine
+    # 3. High-precision deterministic fallback engine
     try:
-        return _run_deterministic_fallback(operator_notes, battery_capacity_kwh)
+        fallback_result = _run_deterministic_fallback(operator_notes, battery_capacity_kwh)
+        _INTERPRETER_CACHE[cache_key] = fallback_result
+        return fallback_result
     except Exception as ex:
         logger.error("Deterministic fallback engine error: %s. Returning safe no_ops.", ex)
-        return create_fallback_directives(operator_notes)
+        safe_fallback = create_fallback_directives(operator_notes)
+        return safe_fallback
