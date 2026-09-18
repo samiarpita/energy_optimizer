@@ -317,11 +317,11 @@ python scripts/test_public_samples.py
 
 ## 8. Docker Fallback Image (Organizer Reproduction)
 
-A tested, standalone container image is published for fallback execution by organizers.
+A tested, standalone container image is published to GitHub Container Registry (GHCR) for fallback execution by organizers:
 
-### 1. Pull Image from Docker Hub
+### 1. Pull Image from Registry
 ```bash
-docker pull <DOCKERHUB_USERNAME>/gridwise-optimizer:latest
+docker pull ghcr.io/samiarpita/energy_optimizer:latest
 ```
 
 ### 2. Run Container
@@ -330,14 +330,14 @@ docker run -d \
   -p 8000:8000 \
   -e GEMINI_API_KEY="your_api_key_here" \
   --name gridwise_app \
-  <DOCKERHUB_USERNAME>/gridwise-optimizer:latest
+  ghcr.io/samiarpita/energy_optimizer:latest
 ```
 
 ### 3. Verify Container Readiness
 ```bash
 curl http://localhost:8000/health
 ```
-*(Should return `{"status": "ok"}` within seconds).*
+*(Returns `{"status": "ok"}` within seconds).*
 
 ---
 
