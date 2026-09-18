@@ -2,6 +2,9 @@
 ### BUP CSE Fest 2026 Hackathon · Online Preliminary Round
 **Challenge:** LLM-Assisted Operator Directive Interpretation & 24-Hour Energy Scheduling  
 **Endpoints:** `GET /health` · `POST /optimize-energy`  
+**Live Production API:** [https://energyoptimizer-production-70c0.up.railway.app](https://energyoptimizer-production-70c0.up.railway.app)  
+**Interactive Swagger UI:** [https://energyoptimizer-production-70c0.up.railway.app/docs](https://energyoptimizer-production-70c0.up.railway.app/docs)  
+**Readiness Health Check:** [https://energyoptimizer-production-70c0.up.railway.app/health](https://energyoptimizer-production-70c0.up.railway.app/health)  
 **License:** MIT
 
 ---
