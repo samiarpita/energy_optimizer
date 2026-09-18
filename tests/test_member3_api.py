@@ -277,3 +277,58 @@ def test_optimize_energy_route_validation_error():
     response = client.post("/optimize-energy", json=bad_payload)
     assert response.status_code == 422
     assert "detail" in response.json()
+
+
+def test_optimize_energy_empty_notes():
+    req = OptimizeEnergyRequest(
+        scenario_id="EMPTY-NOTES-SCENARIO",
+        operator_notes=[],
+        hours=create_valid_hours(),
+        battery=create_valid_battery(),
+    )
+    response = client.post("/optimize-energy", json=req.model_dump())
+    assert response.status_code == 200
+    data = response.json()
+    assert data["scenario_id"] == "EMPTY-NOTES-SCENARIO"
+    assert len(data["directive_interpretation"]) == 0
+    assert len(data["hourly_plan"]) == 24
+
+
+def test_all_10_public_sample_cases():
+    """Execute all 10 sample cases from scripts/sample_cases.json through the API."""
+    import json
+    import os
+
+    cases_file = os.path.join(os.path.dirname(__file__), "..", "scripts", "sample_cases.json")
+    assert os.path.exists(cases_file), f"Missing {cases_file}"
+
+    with open(cases_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    cases = data.get("cases", [])
+    assert len(cases) == 10, f"Expected exactly 10 cases in sample_cases.json, got {len(cases)}"
+
+    for idx, case_wrapper in enumerate(cases, 1):
+        payload = case_wrapper.get("input", case_wrapper)
+        scenario_id = payload.get("scenario_id", f"SAMPLE-{idx}")
+
+        response = client.post("/optimize-energy", json=payload)
+        assert response.status_code == 200, f"Case {scenario_id} failed with status {response.status_code}: {response.text}"
+
+        res_data = response.json()
+        assert res_data["scenario_id"] == scenario_id
+        assert len(res_data["hourly_plan"]) == 24
+        assert len(res_data["directive_interpretation"]) == len(payload.get("operator_notes", []))
+        assert res_data["total_grid_kwh"] >= 0.0
+        assert res_data["total_cost_bdt"] >= 0.0
+        assert res_data["peak_grid_kwh"] >= 0.0
+        assert len(res_data["plan_summary"]) > 0
+
+        # Validate physics independently
+        parsed_req = OptimizeEnergyRequest(**payload)
+        parsed_dirs = [DirectiveInterpretation(**d) for d in res_data["directive_interpretation"]]
+        parsed_plan = [HourlyPlanEntry(**p) for p in res_data["hourly_plan"]]
+
+        replay_res = verify_and_recalculate_schedule(parsed_req, parsed_dirs, parsed_plan)
+        assert replay_res.is_valid is True, f"Case {scenario_id} replay check failed: {replay_res.errors}"
+
