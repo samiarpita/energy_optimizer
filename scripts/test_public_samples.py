@@ -17,12 +17,20 @@ import time
 from typing import Any, Dict, List
 import httpx
 
+import warnings
+warnings.filterwarnings("ignore")
+
+# Ensure project root is in sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 # Ensure UTF-8 output encoding on Windows consoles
 if sys.stdout.encoding != 'utf-8':
     try:
         sys.stdout.reconfigure(encoding='utf-8')
     except Exception:
         pass
+
+
 
 
 SAMPLE_PAYLOAD_GRID101 = {
@@ -68,12 +76,14 @@ SAMPLE_PAYLOAD_GRID101 = {
 }
 
 
-def test_health_endpoint(client: httpx.Client, base_url: str) -> bool:
+def test_health_endpoint(client: Any, base_url: str) -> bool:
     print("\n🔍 [1/2] Testing GET /health...")
     try:
         start_t = time.time()
-        resp = client.get(f"{base_url}/health", timeout=5.0)
+        kwargs = {"timeout": 5.0} if isinstance(client, httpx.Client) else {}
+        resp = client.get(f"{base_url}/health", **kwargs)
         elapsed = (time.time() - start_t) * 1000
+
 
         if resp.status_code != 200:
             print(f"❌ FAILED: Status code is {resp.status_code}, expected 200.")
@@ -200,8 +210,10 @@ def test_optimization_endpoint(client: httpx.Client, base_url: str) -> bool:
 
         try:
             start_t = time.time()
-            resp = client.post(f"{base_url}/optimize-energy", json=payload, timeout=15.0)
+            kwargs = {"timeout": 15.0} if isinstance(client, httpx.Client) else {}
+            resp = client.post(f"{base_url}/optimize-energy", json=payload, **kwargs)
             elapsed = (time.time() - start_t) * 1000
+
 
             if resp.status_code != 200:
                 print(f"❌ FAILED (Status {resp.status_code})")
@@ -229,16 +241,21 @@ def test_optimization_endpoint(client: httpx.Client, base_url: str) -> bool:
 def main():
     parser = argparse.ArgumentParser(description="GridWise Public Test Verification Runner")
     parser.add_argument("--url", default="http://localhost:8000", help="Base URL of GridWise service")
+    parser.add_argument("--local", action="store_true", help="Run tests in-process using FastAPI TestClient")
     args = parser.parse_args()
 
-    base_url = args.url.rstrip("/")
     print(f"🚀 GridWise Public Sample Test Runner")
-    print(f"🎯 Target URL: {base_url}")
 
-    with httpx.Client() as client:
+    if args.local:
+        print("🎯 Mode: In-Process FastAPI TestClient")
+        from fastapi.testclient import TestClient
+        from app.main import app
+        client = TestClient(app)
+        base_url = ""
+
         health_ok = test_health_endpoint(client, base_url)
         if not health_ok:
-            print("\n❌ Health check failed. Ensure the server is running and accessible.")
+            print("\n❌ In-process health check failed.")
             sys.exit(1)
 
         opt_ok = test_optimization_endpoint(client, base_url)
@@ -246,9 +263,32 @@ def main():
             print("\n❌ One or more optimization test cases failed.")
             sys.exit(1)
 
-    print("\n🎉 ALL CHECKS PASSED! API is 100% compliant with Hackathon Specifications.\n")
+        print("\n🎉 ALL 10 CASES PASSED! API is 100% compliant with Hackathon Specifications.\n")
+        sys.exit(0)
+
+    base_url = args.url.rstrip("/")
+    print(f"🎯 Target URL: {base_url}")
+
+    try:
+        with httpx.Client() as client:
+            health_ok = test_health_endpoint(client, base_url)
+            if not health_ok:
+                print("\n❌ Health check failed. Ensure the server is running or use --local for in-process tests.")
+                sys.exit(1)
+
+            opt_ok = test_optimization_endpoint(client, base_url)
+            if not opt_ok:
+                print("\n❌ One or more optimization test cases failed.")
+                sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ Connection error: {e}")
+        print("💡 Tip: You can test the API in-process anytime using: python scripts/test_public_samples.py --local")
+        sys.exit(1)
+
+    print("\n🎉 ALL 10 CASES PASSED! API is 100% compliant with Hackathon Specifications.\n")
     sys.exit(0)
 
 
 if __name__ == "__main__":
     main()
+
